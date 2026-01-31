@@ -1,0 +1,81 @@
+version: '3'
+
+vars:
+  SWAP_PILOT_DB_DSN: '{{.SWAP_PILOT_DB_DSN | default ""}}'
+
+tasks:
+  help:
+    desc: print this help message
+    cmds:
+      - task --list-all
+    silent: true
+
+  confirm:
+    desc: confirmation prompt
+    cmds:
+      - |
+        echo -n 'Are you sure? [y/N] ' && read ans && [ "${ans:-N}" = y ]
+    silent: true
+    internal: true
+
+  run:
+    desc: run the swap-pilot application
+    cmds:
+      - go run ./cmd/swap-pilot
+
+  build:
+    desc: build the swap-pilot binary
+    cmds:
+      - mkdir -p bin
+      - go build -o bin/swap-pilot ./cmd/swap-pilot
+
+  test:
+    desc: run all tests
+    cmds:
+      - go test ./...
+
+  migrations:new:
+    desc: create a new database migration
+    vars:
+      NAME: '{{.name | default ""}}'
+    cmds:
+      - |
+        if [ -z "{{.NAME}}" ]; then
+          echo "Error: name parameter is required"
+          echo "Usage: task migrations:new name=create_users_table"
+          exit 1
+        fi
+      - echo 'Creating migration: {{.NAME}}'
+      - tern new -m ./internal/database/migrations {{.NAME}}
+
+  migrations:up:
+    desc: apply all up database migrations
+    deps: [confirm]
+    cmds:
+      - |
+        if [ -z "{{.SWAP_PILOT_DB_DSN}}" ]; then
+          echo "Error: SWAP_PILOT_DB_DSN is not set"
+          exit 1
+        fi
+      - echo 'Running up migrations...'
+      - tern migrate -m ./internal/database/migrations --conn-string {{.SWAP_PILOT_DB_DSN}}
+
+  migrations:status:
+    desc: show migration status
+    cmds:
+      - tern status -m ./internal/database/migrations --conn-string {{.SWAP_PILOT_DB_DSN}}
+
+  tidy:
+    desc: format code and tidy dependencies
+    cmds:
+      - echo 'Formatting Go files...'
+      - go fmt ./...
+      - echo 'Tidying modules...'
+      - go mod tidy
+      - echo 'Verifying modules...'
+      - go mod verify
+
+  clean:
+    desc: remove build artifacts
+    cmds:
+      - rm -rf bin
